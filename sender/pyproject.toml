@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "svc-broadcast-sender"
+version = "0.3.0"
+description = "Explicit device capture, tone and PCM WAV sender for SVC broadcast"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "websockets==15.0.1",
+    "sounddevice==0.5.3",
+    "numpy==2.2.6",
+    "soxr==1.0.0",
+]
+
+[project.scripts]
+svc-broadcast-send = "svc_broadcast_sender.cli:main"
+
+[dependency-groups]
+dev = ["pytest==8.3.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

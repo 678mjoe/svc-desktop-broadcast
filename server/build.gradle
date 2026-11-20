@@ -1,0 +1,159 @@
+// Adapted from NeoForgeMDKs/MDK-1.21.1-ModDevGradle at
+// e93d7f09d4eec12c76d1d7be9bf4eaad0246e9e0 (see TEMPLATE_LICENSE.txt).
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = mod_version
+group = mod_group_id
+base.archivesName = mod_id
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// User-selected mirror; also covers repositories injected by ModDevGradle.
+repositories.withType(MavenArtifactRepository).configureEach { repository ->
+    if (repository.url.host == 'maven.neoforged.net') {
+        repository.url = uri('https://neoforged.forgecdn.net' + repository.url.path)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url = 'https://maven.maxhenkel.de/repository/public'
+        content { includeGroup 'de.maxhenkel.voicechat' }
+    }
+    maven {
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+    runs {
+        server {
+            server()
+            gameDirectory = project.file('run')
+            programArgument '--nogui'
+        }
+    }
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+configurations {
+    runtimeClasspath.extendsFrom localRuntime
+    neoFormTools {
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    // Keep certificate generation local; no OpenSSL/keytool process or global provider registration.
+    ['bcprov', 'bcutil', 'bcpkix'].each { artifact ->
+        jarJar(implementation("org.bouncycastle:${artifact}-jdk18on:1.83")) {
+            version { strictly '[1.83]'; prefer '1.83' }
+            transitive = false
+        }
+        // Dev runs load implementation libraries on a separate module layer;
+        // mirror the packaged JarJar dependency on the game runtime as well.
+        additionalRuntimeClasspath("org.bouncycastle:${artifact}-jdk18on:1.83") {
+            transitive = false
+        }
+    }
+    // Required by the pinned NeoForge userdev config. Resolve via Gradle so NFRT
+    // does not fall back to the original repository URL embedded in that config.
+    neoFormTools 'net.neoforged.installertools:binarypatcher:2.1.2:fatjar'
+    compileOnly "de.maxhenkel.voicechat:voicechat-api:${voicechat_api_version}"
+    localRuntime "maven.modrinth:simple-voice-chat:neoforge-${minecraft_version}-${voicechat_version}"
+    // Minecraft provides Netty 4.1.97, but not its HTTP/WebSocket module.
+    jarJar(implementation('io.netty:netty-codec-http')) {
+        version {
+            strictly '[4.1.97.Final]'
+            prefer '4.1.97.Final'
+        }
+        transitive = false
+    }
+    additionalRuntimeClasspath('io.netty:netty-codec-http:4.1.97.Final') {
+        transitive = false
+    }
+    testImplementation "de.maxhenkel.voicechat:voicechat-api:${voicechat_api_version}"
+    // Exercise the pinned release's real category packet serializer.
+    testImplementation "maven.modrinth:simple-voice-chat:neoforge-${minecraft_version}-${voicechat_version}"
+    // Unit tests run outside Minecraft's supplied runtime libraries.
+    testImplementation 'io.netty:netty-codec-http:4.1.97.Final'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'org.slf4j:slf4j-api:2.0.9'
+    testRuntimeOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.22.1'
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('createMinecraftArtifacts') {
+    addArtifactsToManifest(configurations.neoFormTools)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// The category regression test serializes a real Minecraft/SVC login payload.
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.test.runtimeClasspath += sourceSets.main.compileClasspath
+
+tasks.named('processResources', ProcessResources) {
+    from('../LICENSE') { into 'META-INF' }
+    def metadata = [mod_id: mod_id, mod_version: mod_version,
+                    neo_version: neo_version, minecraft_version: minecraft_version,
+                    voicechat_version: voicechat_version]
+    inputs.properties metadata
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand metadata
+    }
+}
+
+tasks.register('prepareDevServer') {
+    group = 'development'
+    description = 'Copies missing local server configs; never changes existing configs or accepts the EULA.'
+    doLast {
+        fileTree('dev').files.each { source ->
+            def relative = file('dev').toPath().relativize(source.toPath())
+            def destination = file('run').toPath().resolve(relative)
+            java.nio.file.Files.createDirectories(destination.parent)
+            if (!java.nio.file.Files.exists(destination)) {
+                java.nio.file.Files.copy(source.toPath(), destination)
+            }
+        }
+    }
+}
+
+tasks.named('runServer') {
+    dependsOn tasks.named('prepareDevServer')
+    standardInput = System.in
+}
+
+tasks.named('wrapper', Wrapper) {
+    gradleVersion = '9.2.1'
+    distributionType = Wrapper.DistributionType.BIN
+    distributionSha256Sum = '72f44c9f8ebcb1af43838f45ee5c4aa9c5444898b3468ab3f4af7b6076c5bc3f'
+}
+
+// Explicit local interop check: Java TLS/authorization server -> real Python sender.
+tasks.register('interopTest', JavaExec) {
+    group = 'verification'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'page.mjoe.svcbroadcast.InteropHarness'
+    args rootProject.projectDir.parentFile.absolutePath
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}

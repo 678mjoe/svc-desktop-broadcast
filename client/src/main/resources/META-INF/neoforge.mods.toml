@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="svc_broadcast_sender"
+version="${mod_version}"
+displayName="SVC Broadcast Sender"
+displayTest="IGNORE_ALL_VERSION"
+description="Local commands for the optional SVC desktop broadcast sender."
+
+[[dependencies.svc_broadcast_sender]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.230,21.2)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.svc_broadcast_sender]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="CLIENT"

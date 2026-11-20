@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="SVC Broadcast"
+displayTest="IGNORE_SERVER_VERSION"
+description='''
+Authenticated live PCM and test-tone broadcast through an independent Simple Voice Chat channel.
+Listeners need Simple Voice Chat; this addon is not required on clients.
+'''
+
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version}]"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="[${minecraft_version}]"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.${mod_id}]]
+modId="voicechat"
+type="required"
+versionRange="[${minecraft_version}-${voicechat_version}]"
+ordering="AFTER"
+side="SERVER"

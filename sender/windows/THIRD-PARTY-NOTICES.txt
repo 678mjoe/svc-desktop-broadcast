@@ -1,0 +1,42 @@
+SVC Desktop Broadcast - Windows test bundle
+The project's own source code is available under the MIT License in the
+source repository. The bundled components retain their upstream terms.
+
+Python 3.12.13 Windows x86_64 runtime is from Astral python-build-standalone,
+the same managed-runtime source used by uv. See runtime/LICENSE.txt and the
+other upstream notices retained in runtime/. Build source/version is recorded
+in BUILD-MANIFEST.json. C/C++ runtime and native support libraries included by
+the upstream Python distribution are retained without modification.
+https://github.com/astral-sh/python-build-standalone
+
+The exact Windows wheels and hashes come from sender/uv.lock. Original
+distribution metadata, license files and bundled native-library notices are
+retained under app/vendor/:
+  websockets 15.0.1
+  sounddevice 0.5.3 (includes user-space PortAudio, not a system audio driver)
+  numpy 2.2.6
+  soxr 1.0.0 (includes libsoxr)
+  cffi 2.1.1
+  pycparser 3.12
+
+SoXR imports msvcp140.dll by its original name. The unmodified MSVC DLL already
+provided by the pinned NumPy Windows wheel is also included under that name in
+runtime/. Its original NumPy copy and notices are retained; the source path and
+byte-identical SHA-256 alias are recorded in BUILD-MANIFEST.json.
+
+soxr/libsoxr license and source information remain in the wheel metadata:
+https://pypi.org/project/soxr/1.0.0/
+https://github.com/dofuuz/python-soxr
+https://sourceforge.net/projects/soxr/
+The exact hash-verified soxr 1.0.0 source distribution (including its vendored
+libsoxr source) is also provided in third-party-source/soxr-1.0.0.tar.gz.
+Other component notices are found in their .dist-info directories and .libs
+directories. Before publishing a portable binary, check the redistribution
+terms for the included Visual C++ runtime files and retain the applicable
+license and notices.
+https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
+
+OBS and VB-CABLE are not bundled. Obtain them from their publishers and decide
+separately whether to install them; this package does not install drivers or
+modify audio routes. No credentials, private CA, SSH key, or personal profiles
+are included. A server-specific public CA is obtained by explicit game pairing.

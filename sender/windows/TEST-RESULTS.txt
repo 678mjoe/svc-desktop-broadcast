@@ -1,0 +1,30 @@
+Windows test bundle: 0.3.0-win-test2
+Test date/time:
+Windows version/build:
+CPU (Intel/AMD x64):
+Package SHA-256:
+
+Self-check (dependencies, private ACL, atomic save):
+Server version (P4B candidate or P4A compatibility check):
+Server setup status (for P4B):
+Pairing success (do not paste pairing information or tokens):
+
+Optional broadcast checks:
+Device full name / host API / sample rate / channels:
+OBS version / selected application:
+Other listener present (yes/no):
+
+1-second tone upload / another player actually heard it:
+Music 1-2 minutes:
+Pause/resume twice in same session:
+Music and normal push-to-talk coexist:
+Mic mute does not stop music:
+Other listener volume / listen off/on:
+Sender hears no doubled music:
+MC logout ends broadcast / relogin does not restart:
+Manual restart and Ctrl+C:
+
+Failures: step, exact safe error code, related log filename:
+Not tested / deferred:
+
+Attach only relevant logs. Do not attach profiles, pairing blobs, tokens, or audio recordings.

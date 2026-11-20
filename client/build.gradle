@@ -1,0 +1,95 @@
+import java.security.DigestInputStream
+import java.security.MessageDigest
+
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = '0.1.4-p4d'
+group = 'page.mjoe.svcbroadcast'
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories.withType(MavenArtifactRepository).configureEach { repository ->
+    if (repository.url.host == 'maven.neoforged.net') {
+        repository.url = uri('https://neoforged.forgecdn.net' + repository.url.path)
+    }
+}
+
+repositories { mavenCentral() }
+
+neoForge {
+    version = project.neo_version
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('run')
+        }
+    }
+    mods {
+        svc_broadcast_sender {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+configurations {
+    neoFormTools { canBeConsumed = false }
+}
+
+dependencies {
+    neoFormTools 'net.neoforged.installertools:binarypatcher:2.1.2:fatjar'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('createMinecraftArtifacts') {
+    addArtifactsToManifest(configurations.neoFormTools)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.named('test', Test) { useJUnitPlatform() }
+
+def embeddedZips = [
+    'windows-x64': providers.gradleProperty('embeddedSenderZip').map { file(it) },
+    'macos-arm64': providers.gradleProperty('embeddedMacSenderZip').map { file(it) }
+]
+def embeddedResources = layout.buildDirectory.dir('generated/embeddedSender')
+def prepareEmbeddedSender = tasks.register('prepareEmbeddedSender') {
+    embeddedZips.each { platform, archive ->
+        inputs.file(archive).withPropertyName(platform).optional().withPathSensitivity(PathSensitivity.NONE)
+    }
+    outputs.dir(embeddedResources)
+    doLast {
+        def destination = embeddedResources.get().asFile
+        project.delete(destination)
+        destination.mkdirs()
+        embeddedZips.findAll { platform, archive -> archive.isPresent() }.each { platform, archive ->
+            def resources = new File(destination, "svc-broadcast/${platform}")
+            resources.mkdirs()
+            def digest = MessageDigest.getInstance('SHA-256')
+            archive.get().withInputStream { source ->
+                new File(resources, 'sender.zip').withOutputStream { target ->
+                    new DigestInputStream(source, digest).transferTo(target)
+                }
+            }
+            new File(resources, 'sender.sha256').setText(digest.digest().encodeHex().toString() + '\n', 'US-ASCII')
+        }
+    }
+}
+
+tasks.named('processResources', ProcessResources) {
+    from(prepareEmbeddedSender)
+    from('../LICENSE') { into 'META-INF' }
+    def metadata = [mod_version: version]
+    inputs.properties metadata
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand metadata
+    }
+}
