@@ -18,7 +18,8 @@ case "${1:-}" in
         export ZIG_GLOBAL_CACHE_DIR="$source_dir/../../backups/p4c-native/zig-cache"
         export ZIG_LOCAL_CACHE_DIR="$ZIG_GLOBAL_CACHE_DIR/local"
         zig cc -target x86_64-windows-gnu -std=c11 -municode -O2 -Wall -Wextra -Werror \
-            "$source_dir/windows_meter.c" -lmmdevapi -lole32 -luuid -luser32 -lversion -o "$dist_dir/svc-wasapi-check.exe"
+            "$source_dir/windows_meter.c" -lmmdevapi -lole32 -luuid -luser32 -lversion -ladvapi32 \
+            -o "$dist_dir/svc-wasapi-check.exe"
         if [ "$1" = windows-package ]; then
             python3 "$source_dir/package_windows.py" "$dist_dir"
         fi

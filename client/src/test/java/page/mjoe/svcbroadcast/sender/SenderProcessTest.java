@@ -42,7 +42,8 @@ class SenderProcessTest {
         Path launcher = launcher(List.of("relative/path"));
         assertThrows(IOException.class, () -> SenderProcess.command(launcher));
         var exit = new CompletableFuture<String>();
-        new SenderProcess(launcher, List.of("apps"), event -> fail("Unexpected sender event"), exit::complete)
+        new GameSender(launcher, () -> fail("The explicit launcher must override the bundled helper"))
+                .query("apps", event -> fail("Unexpected sender event"), exit::complete)
                 .launch(false);
         assertEquals("launcher_config", exit.get(5, TimeUnit.SECONDS));
     }

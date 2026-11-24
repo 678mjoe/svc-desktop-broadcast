@@ -111,6 +111,12 @@ tasks.named('test', Test) {
 sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
 sourceSets.test.runtimeClasspath += sourceSets.main.compileClasspath
 
+// Test the exact Minecraft client pairing and transport against the real loopback ingress.
+tasks.named('compileTestJava', JavaCompile) {
+    source('../client/src/main/java/page/mjoe/svcbroadcast/sender/JavaUpload.java',
+           '../client/src/main/java/page/mjoe/svcbroadcast/sender/JavaProfiles.java')
+}
+
 tasks.named('processResources', ProcessResources) {
     from('../LICENSE') { into 'META-INF' }
     def metadata = [mod_id: mod_id, mod_version: mod_version,

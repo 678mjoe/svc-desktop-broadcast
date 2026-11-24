@@ -11,10 +11,10 @@ The project currently supports **Minecraft 1.21.1 on NeoForge only**. Support fo
 | User role | Installation requirements |
 |---|---|
 | Server admin | Minecraft 1.21.1, NeoForge 21.1.230 or 21.1.251, Simple Voice Chat 2.6.20, and server add-on 0.3.3-p4d |
-| Broadcaster | Simple Voice Chat and a sender. The in-game sender 0.1.4-p4d is recommended. |
+| Broadcaster | Simple Voice Chat and the in-game sender or the standalone sender |
 | Listener | Simple Voice Chat |
 
-The same sender JAR supports Windows 11 x64 and offers preview support for Apple Silicon Macs running macOS 14.2 or later. The in-game sender targets Minecraft 1.21.1 and NeoForge 21.1.x starting at 21.1.230.
+The in-game sender targets Minecraft 1.21.1 and NeoForge 21.1.x starting at 21.1.230. P4D (`0.1.4-p4d`) supports Windows 11 x64 and offers preview support on Apple Silicon with macOS 14.2 or later. The P4E test build (`0.2.0-p4e`) targets both platforms and runs in Minecraft’s Java 21 JVM. It bundles a native audio helper for each platform. [In-game sender guide](client/README.md)
 
 This is a source preview. This project is evolving rapidly, and its contents, dependencies, and implementation may change at any time. Before deploying it on the public internet, review the notes on bundled dependencies, especially the server's Netty HTTP module. [Third-party dependencies and licenses](THIRD_PARTY_NOTICES.md)
 
@@ -36,13 +36,13 @@ This is a source preview. This project is evolving rapidly, and its contents, de
 2. Join the server and start playback in the app you want to share. In Minecraft chat, run `/svcsender apps`, then run `/svcsender select 1` using the app's actual number from the list.
 3. Run `/svcsender start`. The sender reuses a matching pairing profile or pairs with the server on first use. Run `/svcsender status` to check the broadcast and `/svcsender stop` to stop it.
 
-The first command that needs the bundled sender automatically extracts the runtime for your platform. You can also broadcast from the standalone command-line sender. Both follow the server's broadcaster permissions and logout policy. [Standalone sender guide](sender/README.md)
+P4E extracts the native audio helper for your platform on first use. The standalone command-line sender remains available. Both follow the server's broadcaster permissions and logout policy. [Standalone sender guide](sender/README.md)
 
 Listeners can adjust **Desktop Music** in Simple Voice Chat's volume settings. Use `/svcbroadcast listen off` to opt out and `/svcbroadcast listen on` to resume listening.
 
 ## Build and test
 
-Install Java 21, Python 3.12, and uv. Run these commands from the repository root. The first build resolves the tools and dependencies. The default client build uses an external sender. The packaging instructions above cover the JAR with its sender bundled.
+Install Java 21, Python 3.12, and uv to run the full development checks. Run these commands from the repository root. The first build resolves the tools and dependencies. Use the packaging instructions above to build a client JAR with both native helpers.
 
 ```sh
 (cd sender && uv sync --locked && uv run --locked pytest)

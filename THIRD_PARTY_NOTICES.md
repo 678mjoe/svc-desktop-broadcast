@@ -12,7 +12,9 @@
 
 服务端构建产物嵌入 Bouncy Castle 1.83 和 Netty HTTP 编解码模块。仓库保留 [Bouncy Castle 许可](server/src/main/resources/META-INF/licenses/bouncycastle-1.83.txt)。现用的 `netty-codec-http:4.1.97.Final` JAR 未包含独立的 `LICENSE` 或 `NOTICE` 条目。公开发行服务端 JAR 前，需为实际嵌入版本随包提供对应的上游声明，并评估更新 Netty 与 Minecraft 运行时的兼容性。Netty 公告列出的受影响版本包含当前依赖，服务端也使用了公告所述的 `HttpServerCodec`。[Netty 4.1.97.Final 许可证](https://github.com/netty/netty/blob/netty-4.1.97.Final/LICENSE.txt)、[Netty 4.1.97.Final NOTICE](https://github.com/netty/netty/blob/netty-4.1.97.Final/NOTICE.txt)、[Netty 公告](https://github.com/netty/netty/security/advisories/GHSA-pvjx-v7vp-62vq)
 
-便携发送器包含 [Astral 的 CPython 发行版](https://github.com/astral-sh/python-build-standalone)及 [`sender/uv.lock`](sender/uv.lock) 固定的 Python wheel。试用包自带上游许可证和 `soxr` 1.0.0 的对应源码归档，其中含 `libsoxr` 源码。`soxr` 与 `libsoxr` 采用 LGPL-2.1-or-later，发布相应二进制时需保留许可证和对应源码。[Python-SoXR 1.0.0](https://pypi.org/project/soxr/1.0.0/)
+P4E 客户端 JAR 使用 Minecraft JVM，随包提供原生采集助手。Windows 助手链接系统库，Mac 助手链接系统框架。Mac 测试包采用 ad hoc 签名，公开分发时仍需确认签名方式。
+
+独立便携发送器和 P4D 客户端包含 [Astral 的 CPython 发行版](https://github.com/astral-sh/python-build-standalone)及 [`sender/uv.lock`](sender/uv.lock) 固定的 Python wheel。试用包自带上游许可证和 `soxr` 1.0.0 的对应源码归档，其中含 `libsoxr` 源码。`soxr` 与 `libsoxr` 采用 LGPL-2.1-or-later，发布相应二进制时需保留许可证和对应源码。[Python-SoXR 1.0.0](https://pypi.org/project/soxr/1.0.0/)
 
 Windows 试用包还包含来自 CPython 与 NumPy 的 Microsoft Visual C++ 运行时文件。公开发行包含 Windows 运行时的 ZIP 或客户端 JAR 前，需核实这些文件及包内 `msvcp140.dll` 别名的再分发条款，并附上项目自身的 MIT 声明。[Windows 第三方声明](sender/windows/THIRD-PARTY-NOTICES.txt)、[Microsoft 再分发条款说明](https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files)
 

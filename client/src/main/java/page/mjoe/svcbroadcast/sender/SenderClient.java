@@ -27,8 +27,6 @@ import net.neoforged.bus.api.IEventBus;
 import org.lwjgl.glfw.GLFW;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -39,13 +37,14 @@ import java.util.function.Consumer;
 @Mod(value = "svc_broadcast_sender", dist = Dist.CLIENT)
 public final class SenderClient {
     private static final int PAGE_SIZE = 8;
-    private final Path launcher = FMLPaths.CONFIGDIR.get().resolve("svc-broadcast-sender.json");
+    private final GameSender sender = new GameSender(FMLPaths.CONFIGDIR.get().resolve("svc-broadcast-sender.json"),
+            () -> Minecraft.getInstance().execute(() -> say("首次使用，正在准备本机采集助手，请稍候…")));
     // Command handling and all process notifications below run on the client thread.
     private List<App> apps = List.of();
     private List<App> selected = List.of();
     private List<String> profiles = List.of();
-    private SenderProcess query;
-    private SenderProcess session;
+    private GameSender.Task query;
+    private GameSender.Task session;
     private PairingAttempt pairing;
     private String profile;
     private String state = "未开播";
@@ -112,7 +111,7 @@ public final class SenderClient {
             profiles = List.of();
         }
         boolean[] received = {false};
-        query = process(List.of(action), event -> {
+        query = sender.query(action, dispatchEvent(event -> {
             if (received[0]) return;
             received[0] = true;
             String kind = field(event, "event");
@@ -138,10 +137,10 @@ public final class SenderClient {
             } else {
                 say(errorMessage("bridge_protocol"));
             }
-        }, error -> {
+        }), dispatch(error -> {
             query = null;
             if (!received[0]) say(errorMessage(error == null ? "bridge_protocol" : error));
-        });
+        }));
         query.launch(false);
         return say("正在读取本机" + (action.equals("apps") ? "音频应用…" : "配对档…"));
     }
@@ -190,14 +189,13 @@ public final class SenderClient {
         profile = requestedProfile;
         fault = null;
         state = "正在连接";
-        var arguments = new ArrayList<>(List.of("start", "--profile=" + profile));
-        for (App app : selected) arguments.add("--app=" + app.id());
-        session = process(arguments, this::broadcastEvent, error -> {
+        List<String> selectors = selected.stream().map(App::id).toList();
+        session = sender.broadcast(profile, selectors, dispatchEvent(this::broadcastEvent), dispatch(error -> {
             session = null;
             if (fault == null && error != null) fault = error;
             state = "未开播";
             say(fault == null ? "广播已停止。" : errorMessage(fault));
-        });
+        }));
         session.launch(true);
         return status();
     }
@@ -249,19 +247,18 @@ public final class SenderClient {
         if (session != null) session.stop();
     }
 
-    private SenderProcess process(List<String> args, Consumer<JsonObject> events, Consumer<String> exit) {
-        return process(args, null, events, exit);
+    private static <T> Consumer<T> dispatch(Consumer<T> callback) {
+        return value -> Minecraft.getInstance().execute(() -> callback.accept(value));
     }
 
-    private SenderProcess process(List<String> args, String input, Consumer<JsonObject> events, Consumer<String> exit) {
-        return new SenderProcess(launcher, args, input, event -> Minecraft.getInstance().execute(() -> {
+    private static Consumer<JsonObject> dispatchEvent(Consumer<JsonObject> events) {
+        return dispatch(event -> {
             try {
                 events.accept(event);
             } catch (RuntimeException exception) {
                 say(errorMessage("bridge_protocol"));
             }
-        }), error -> Minecraft.getInstance().execute(() -> exit.accept(error)),
-                () -> Minecraft.getInstance().execute(() -> say("首次使用，正在准备本机发送器，请稍候…")));
+        });
     }
 
     private void registerPairing(RegisterPayloadHandlersEvent event) {
@@ -320,12 +317,9 @@ public final class SenderClient {
         }
         if (lookup) attempt.identity = packet.data();
         attempt.expected = -1;
-        String input = attempt.identity + "\n" + (lookup ? "" : packet.data() + "\n");
-        List<String> args = List.of(lookup ? "inspect" : "pair",
-                "--profile=" + attempt.profile, "--player=" + attempt.player);
         JsonObject[] result = {null};
-        attempt.worker = process(args, input, event -> result[0] = event,
-                error -> finishPairingStep(attempt, lookup, result[0], error));
+        attempt.worker = sender.pair(attempt.profile, attempt.player, attempt.identity, lookup ? null : packet.data(),
+                dispatchEvent(event -> result[0] = event), dispatch(error -> finishPairingStep(attempt, lookup, result[0], error)));
         attempt.worker.launch(false);
     }
 
@@ -386,7 +380,7 @@ public final class SenderClient {
         byte expected;
         long deadline;
         String identity;
-        SenderProcess worker;
+        GameSender.Task worker;
 
         PairingAttempt(ClientPacketListener listener, UUID player, String profile, boolean startAfter) {
             this.listener = listener;
@@ -429,23 +423,28 @@ public final class SenderClient {
         String message = switch (code) {
             case "launcher_config" ->
                     "无法启动发送器。请检查 config/svc-broadcast-sender.json 的路径和发送器版本。";
-            case "launcher_unavailable" -> "此平台或 JAR 未提供内置发送器。请使用对应平台的包或配置独立发送器。";
-            case "runtime_install_failed" -> "无法解包内置发送器。请检查本机磁盘空间和用户目录写入权限，再试一次。";
+            case "launcher_unavailable", "unsupported_platform" ->
+                    "此平台或 JAR 未提供内置采集助手。请使用对应平台的包或配置独立发送器。";
+            case "runtime_install_failed" -> "无法验证或安装采集助手。请检查本机磁盘空间和用户目录写入权限。";
             case "launcher_failed" -> "无法运行本机发送器。请确认系统允许运行包内程序。";
             case "bridge_protocol" -> "客户端与发送器通信失败。请核对客户端和发送器版本。";
             case "authentication" -> "服务器拒绝鉴权。请检查广播资格、在线策略及所选配对档。";
             case "tls_verification" -> "服务器身份验证失败。请核对配对档与服务器配置。";
             case "connection", "handshake", "ready_timeout" -> "无法连接广播入口。请检查网络和服务器状态。";
+            case "send_timeout" -> "上传超时，已结束广播。请检查网络后重新开播。";
+            case "redirect_refused", "endpoint" -> "广播地址验证失败。请与服主核对配对档。";
+            case "network_logging" -> "当前 Java 开启了详细网络日志。关闭该选项后才能发送设备凭证。";
             case "server_stopped" -> "服务器结束了广播。请检查资格、在线状态和广播占用。";
             case "app_selection", "coreaudio_selection", "wasapi_selection", "wasapi_app_changed" ->
                     "选中的应用已变化。请让播放器发声，再刷新 /svcsender apps 并重选。";
             case "coreaudio_apps", "coreaudio_unavailable", "coreaudio_start", "coreaudio_stopped",
                     "coreaudio_pipe", "coreaudio_start_timeout", "wasapi_apps", "wasapi_start",
                     "wasapi_stopped", "wasapi_start_timeout", "wasapi_frame_timeout", "startup_timeout",
-                    "wasapi_timeout", "coreaudio_timeout" ->
+                    "wasapi_timeout", "wasapi_clock", "wasapi_pipe", "coreaudio_timeout", "source_frame" ->
                     "未能持续采集。请检查播放器、系统音频权限和发送器助手。";
             case "profile_file", "profile_permissions", "profile_invalid" ->
                     "无法读取配对档。请用现有发送器检查配对档及本机权限。";
+            case "profile_exists" -> "已有同名配对档。请确认现有记录后再重新配对。";
             case "pairing_unavailable", "pairing_rejected" ->
                     "服务器无法配对。请检查广播资格、有效期、设备上限和 WSS 配置。";
             case "pairing_timeout", "list_timeout", "pairing_connection" ->

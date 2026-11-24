@@ -13,16 +13,20 @@
 #include <cstring>
 #include <libproc.h>
 #include <mach/mach_time.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 static constexpr size_t maxTargets = 4;
 static volatile sig_atomic_t stopped;
+static std::atomic<bool> controlClosed{false};
 static void stop(int) { stopped = 1; }
+static bool stopping() { return stopped || controlClosed.load(std::memory_order_relaxed); }
 
 static AudioObjectPropertyAddress property(AudioObjectPropertySelector selector) {
     return {selector, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
@@ -211,7 +215,7 @@ static int streamAudio(AudioPipe &pipe, uint32_t rate, const std::vector<pid_t> 
     if (fwrite("SVCT", 1, 4, stdout) != 4 || fwrite(&rate, sizeof(rate), 1, stdout) != 1 || fflush(stdout)) return 1;
     using namespace std::chrono;
     auto nextCheck = steady_clock::now() + std::chrono::seconds(1);
-    while (!stopped) {
+    while (!stopping()) {
         if (steady_clock::now() >= nextCheck) {
             if (!targetsAlive(pids, processes)) return 1;
             nextCheck = steady_clock::now() + std::chrono::seconds(1);
@@ -261,12 +265,14 @@ static int check(const std::vector<pid_t> &pids, int seconds, bool streaming = f
     // The ring outlives Capture so it remains valid until the IO callback is stopped.
     std::unique_ptr<AudioPipe> pipe;
     Capture capture;
+    if (stopping()) return 0;
     CATapDescription *description = [[CATapDescription alloc] initStereoMixdownOfProcesses:processes];
     description.privateTap = YES;
     description.muteBehavior = CATapUnmuted;
     if (@available(macOS 26, *)) description.processRestoreEnabled = NO;
     OSStatus status = AudioHardwareCreateProcessTap(description, &capture.tap);
     if (status) return audioError("Create process tap", status);
+    if (stopping()) return 0;
     AudioStreamBasicDescription format = {};
     status = readProperty(capture.tap, kAudioTapPropertyFormat, format);
     if (status) return audioError("Read tap format", status);
@@ -297,6 +303,7 @@ static int check(const std::vector<pid_t> &pids, int seconds, bool streaming = f
     status = AudioDeviceCreateIOProcID(capture.device, streaming ? collect : measure,
                                        streaming ? static_cast<void *>(pipe.get()) : &capture.meter, &capture.io);
     if (status) return audioError("Register tap callback", status);
+    if (stopping()) return 0;
     status = AudioDeviceStart(capture.device, capture.io);
     if (status) return audioError("Start tap", status);
     capture.running = true;
@@ -352,19 +359,47 @@ static std::vector<pid_t> parseTargets(const std::string &selection, std::vector
     return pids;
 }
 
+static int controlledStream(const std::vector<pid_t> &pids, const std::vector<std::string> &identities) {
+    struct stat input{};
+    if (fstat(STDIN_FILENO, &input) || !S_ISFIFO(input.st_mode)) return 2;
+
+    std::atomic<bool> finished{false};
+    std::thread control([&] {
+        // No input messages are expected. A readable, closed or invalid pipe means stop.
+        while (!finished.load(std::memory_order_acquire)) {
+            struct pollfd pipe{STDIN_FILENO, POLLIN, 0};
+            const int state = poll(&pipe, 1, 50);
+            if (!state || (state < 0 && errno == EINTR)) continue;
+            controlClosed.store(true, std::memory_order_relaxed);
+            // This also handles an abrupt parent exit during a blocked OS audio call.
+            for (int attempt = 0; attempt < 40; ++attempt) {
+                if (finished.load(std::memory_order_acquire)) return;
+                usleep(50000);
+            }
+            if (!finished.load(std::memory_order_acquire)) _exit(1);
+            return;
+        }
+    });
+    const int result = check(pids, 0, true, identities);
+    finished.store(true, std::memory_order_release);
+    control.join();
+    return result;
+}
+
 int main(int argc, const char **argv) {
     @autoreleasepool {
         if (argc == 2 && !strcmp(argv[1], "list")) return listProcesses(false);
         if (argc == 2 && !strcmp(argv[1], "list-identities")) return listProcesses(true);
-        if (argc == 3 && (!strcmp(argv[1], "stream") || !strcmp(argv[1], "stream-checked"))) {
+        const bool controlled = argc == 3 && !strcmp(argv[1], "stream-checked-controlled");
+        if (argc == 3 && (controlled || !strcmp(argv[1], "stream") || !strcmp(argv[1], "stream-checked"))) {
             std::vector<std::string> identities;
-            const auto pids = parseTargets(argv[2], !strcmp(argv[1], "stream-checked") ? &identities : nullptr);
+            const auto pids = parseTargets(argv[2], strcmp(argv[1], "stream") ? &identities : nullptr);
             struct stat output{};
             if (!pids.empty() && !fstat(STDOUT_FILENO, &output) && S_ISFIFO(output.st_mode)) {
                 std::signal(SIGINT, stop);
                 std::signal(SIGTERM, stop);
                 std::signal(SIGPIPE, SIG_IGN);
-                return check(pids, 0, true, identities);
+                return controlled ? controlledStream(pids, identities) : check(pids, 0, true, identities);
             }
         }
         if (argc == 4 && !strcmp(argv[1], "check")) {

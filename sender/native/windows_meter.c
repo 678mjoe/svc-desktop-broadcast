@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0a00
 #include <windows.h>
+#include <aclapi.h>
 #include <tlhelp32.h>
 #include <winver.h>
 #include <initguid.h>
@@ -656,7 +657,60 @@ static DWORD parseTargets(const wchar_t *text, CaptureTarget *targets) {
     return 0;
 }
 
+// Prepare the same protected, current-user-only DACL as the standalone sender.
+// Work through a handle so a symlink or junction cannot redirect the operation.
+static int profileAcl(const wchar_t *path, BOOL directory) {
+    int result = 1;
+    HANDLE token = NULL;
+    PTOKEN_USER user = NULL;
+    PACL acl = NULL;
+    PSECURITY_DESCRIPTOR descriptor = NULL;
+    HANDLE file = CreateFileW(path, READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                              FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (file == INVALID_HANDLE_VALUE) return result;
+
+    FILE_ATTRIBUTE_TAG_INFO attributes;
+    if (GetFileType(file) != FILE_TYPE_DISK
+            || !GetFileInformationByHandleEx(file, FileAttributeTagInfo, &attributes, sizeof(attributes))
+            || (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+            || ((attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) != directory) goto cleanup;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) goto cleanup;
+    DWORD bytes = 0;
+    GetTokenInformation(token, TokenUser, NULL, 0, &bytes);
+    if (!bytes || bytes > 64 * 1024) goto cleanup;
+    user = malloc(bytes);
+    if (!user || !GetTokenInformation(token, TokenUser, user, bytes, &bytes)) goto cleanup;
+
+    PSID owner = NULL;
+    if (GetSecurityInfo(file, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &owner, NULL, NULL, NULL,
+                        &descriptor) != ERROR_SUCCESS
+            || !owner || !EqualSid(owner, user->User.Sid)) goto cleanup;
+
+    DWORD acl_bytes = sizeof(ACL) + sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(user->User.Sid);
+    acl = malloc(acl_bytes);
+    DWORD inherit = directory ? OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE : 0;
+    if (!acl || !InitializeAcl(acl, acl_bytes, ACL_REVISION)
+            || !AddAccessAllowedAceEx(acl, ACL_REVISION, inherit, FILE_ALL_ACCESS, user->User.Sid)) goto cleanup;
+    if (SetSecurityInfo(file, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                        NULL, NULL, acl, NULL) == ERROR_SUCCESS) result = 0;
+
+cleanup:
+    free(acl);
+    if (descriptor) LocalFree(descriptor);
+    free(user);
+    if (token) CloseHandle(token);
+    CloseHandle(file);
+    return result;
+}
+
 int wmain(int argc, wchar_t **argv) {
+    if (argc == 4 && !wcscmp(argv[1], L"profile-acl")) {
+        if (!wcscmp(argv[2], L"dir")) return profileAcl(argv[3], TRUE);
+        if (!wcscmp(argv[2], L"file")) return profileAcl(argv[3], FALSE);
+        return 2;
+    }
     if ((argc == 2 || argc == 3) && !wcscmp(argv[1], L"apps")) {
         DWORD excluded_pid = argc == 3 ? number(argv[2], MAXDWORD) : 0;
         return argc == 3 && !excluded_pid ? 2 : listApps(excluded_pid);

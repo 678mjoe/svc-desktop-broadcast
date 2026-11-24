@@ -31,7 +31,6 @@ final class SenderProcess {
     private final String input;
     private final Consumer<JsonObject> onEvent;
     private final Consumer<String> onExit;
-    private final Runnable onInstall;
     private volatile Process process;
     private volatile boolean stopping;
     private volatile boolean startedCapture;
@@ -42,17 +41,11 @@ final class SenderProcess {
     }
 
     SenderProcess(Path config, List<String> arguments, String input, Consumer<JsonObject> onEvent, Consumer<String> onExit) {
-        this(config, arguments, input, onEvent, onExit, () -> {});
-    }
-
-    SenderProcess(Path config, List<String> arguments, String input, Consumer<JsonObject> onEvent,
-                  Consumer<String> onExit, Runnable onInstall) {
         this.config = config;
         this.arguments = List.copyOf(arguments);
         this.input = input;
         this.onEvent = onEvent;
         this.onExit = onExit;
-        this.onInstall = onInstall;
     }
 
     void launch(boolean broadcast) {
@@ -80,21 +73,10 @@ final class SenderProcess {
     private String run(boolean broadcast) throws IOException {
         if (stopping) return null;
         List<String> launcher;
-        if (!Files.notExists(config)) {
-            try {
-                launcher = command(config);
-            } catch (IOException | RuntimeException exception) {
-                return "launcher_config";
-            }
-        } else {
-            var platform = EmbeddedSender.detect(System.getProperty("os.name"), System.getProperty("os.arch"));
-            if (platform == null) return "launcher_unavailable";
-            try {
-                launcher = EmbeddedSender.command(platform, platform.cache(), onInstall);
-            } catch (IOException | RuntimeException exception) {
-                return "runtime_install_failed";
-            }
-            if (launcher.isEmpty()) return "launcher_unavailable";
+        try {
+            launcher = command(config);
+        } catch (IOException | RuntimeException exception) {
+            return "launcher_config";
         }
         if (stopping) return null;
         var timeout = TIMER.schedule(() -> {

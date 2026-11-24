@@ -11,10 +11,10 @@ SVC 桌面音频广播是 **Simple Voice Chat（SVC）的 NeoForge 附属模组*
 | 使用者 | 安装要求 |
 |---|---|
 | 服主 | Minecraft 1.21.1、NeoForge 21.1.230 或 21.1.251、Simple Voice Chat 2.6.20、本项目服务端附属 0.3.3-p4d |
-| 广播者 | Simple Voice Chat 与发送器；推荐安装游戏内双平台发送器 0.1.4-p4d |
+| 广播者 | Simple Voice Chat，以及游戏内发送器或独立发送器 |
 | 听众 | Simple Voice Chat |
 
-同一个发送器 JAR 支持 Windows 11 x64，并为 Apple Silicon macOS 14.2+ 提供预览支持。游戏内发送器适用于 Minecraft 1.21.1 和 NeoForge 21.1.230 起的 21.1.x。
+游戏内发送器适用于 Minecraft 1.21.1 和 NeoForge 21.1.230 起的 21.1.x。P4D（`0.1.4-p4d`）支持 Windows 11 x64，并在 Apple Silicon macOS 14.2+ 提供预览支持。P4E 测试版（`0.2.0-p4e`）面向这两个平台，在 Minecraft 的 Java 21 JVM 内运行，随包提供两端的原生采集助手。[游戏内发送器说明](client/README.md)
 
 此版本以源码预览为主。本项目还在快速开发，内容、依赖、实现方式均可能随时发生变化。对公网部署前请查阅依赖发布说明，尤其是服务端内嵌的 Netty HTTP 模块。[第三方依赖与许可](THIRD_PARTY_NOTICES.md)
 
@@ -36,7 +36,7 @@ SVC 桌面音频广播是 **Simple Voice Chat（SVC）的 NeoForge 附属模组*
 2. 进服后让播放器发声。在聊天栏输入 `/svcsender apps`，再输入 `/svcsender select 1`，把 `1` 换成应用列表的实际编号。
 3. 输入 `/svcsender start`。客户端会复用对应的配对档或完成首次配对。用 `/svcsender status` 查看状态，用 `/svcsender stop` 停播。
 
-首次需要发送器的命令会自动解包本机运行时。独立终端发送器也可以开播，详见[发送器说明](sender/README.md)。两种方式都沿用服主配置的授权和下线策略。
+P4E 首次使用时会自动解包本机的原生采集助手。也可通过独立终端发送器开播。两种方式都沿用服主配置的授权和下线策略。[独立发送器说明](sender/README.md)
 
 听众可在 SVC 的音量设置中调整 **Desktop Music**，也可用 `/svcbroadcast listen off` 或 `/svcbroadcast listen on` 退出或恢复收听。
 

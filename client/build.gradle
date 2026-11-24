@@ -1,12 +1,13 @@
-import java.security.DigestInputStream
 import java.security.MessageDigest
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.148'
 }
 
-version = '0.1.4-p4d'
+version = '0.2.0-p4e'
 group = 'page.mjoe.svcbroadcast'
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -56,30 +57,55 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test', Test) { useJUnitPlatform() }
 
-def embeddedZips = [
-    'windows-x64': providers.gradleProperty('embeddedSenderZip').map { file(it) },
-    'macos-arm64': providers.gradleProperty('embeddedMacSenderZip').map { file(it) }
-]
+def windowsHelper = providers.gradleProperty('embeddedWindowsHelper').map { file(it) }
+def macHelper = providers.gradleProperty('embeddedMacHelper').map { file(it) }
 def embeddedResources = layout.buildDirectory.dir('generated/embeddedSender')
 def prepareEmbeddedSender = tasks.register('prepareEmbeddedSender') {
-    embeddedZips.each { platform, archive ->
-        inputs.file(archive).withPropertyName(platform).optional().withPathSensitivity(PathSensitivity.NONE)
-    }
+    inputs.file(windowsHelper).withPropertyName('windowsHelper').optional().withPathSensitivity(PathSensitivity.NONE)
+    inputs.dir(macHelper).withPropertyName('macHelper').optional().withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(embeddedResources)
     doLast {
         def destination = embeddedResources.get().asFile
         project.delete(destination)
         destination.mkdirs()
-        embeddedZips.findAll { platform, archive -> archive.isPresent() }.each { platform, archive ->
-            def resources = new File(destination, "svc-broadcast/${platform}")
-            resources.mkdirs()
+        def copyHelper = { String platform, Map<String, File> files ->
+            def resources = new File(destination, "svc-broadcast/native/${platform}")
             def digest = MessageDigest.getInstance('SHA-256')
-            archive.get().withInputStream { source ->
-                new File(resources, 'sender.zip').withOutputStream { target ->
-                    new DigestInputStream(source, digest).transferTo(target)
+            def hashes = files.collect { relative, source ->
+                if (!Files.isRegularFile(source.toPath(), LinkOption.NOFOLLOW_LINKS)
+                        || source.length() == 0 || source.length() > 8 * 1024 * 1024) {
+                    throw new GradleException("Invalid native helper file ${source}")
                 }
+                byte[] bytes = source.bytes
+                def target = new File(resources, relative)
+                target.parentFile.mkdirs()
+                target.bytes = bytes
+                digest.digest(bytes).encodeHex().toString()
             }
-            new File(resources, 'sender.sha256').setText(digest.digest().encodeHex().toString() + '\n', 'US-ASCII')
+            new File(resources, 'SHA256').setText(hashes.join('\n') + '\n', 'US-ASCII')
+        }
+        if (windowsHelper.isPresent()) {
+            copyHelper('windows-x64', ['svc-wasapi-check.exe': windowsHelper.get()])
+        }
+        if (macHelper.isPresent()) {
+            def bundle = macHelper.get()
+            def entries = [
+                'Contents/MacOS/svc-audio-check', 'Contents/Info.plist', 'Contents/_CodeSignature/CodeResources'
+            ]
+            copyHelper('macos-arm64', entries.collectEntries { relative ->
+                [("SVC Audio Check.app/${relative}".toString()): new File(bundle, relative)]
+            })
+        }
+    }
+}
+
+tasks.register('p4eRelease') {
+    group = 'build'
+    description = 'Builds the dual-platform JAR with both native helper resources.'
+    dependsOn tasks.named('build')
+    doLast {
+        if (!windowsHelper.isPresent() || !macHelper.isPresent()) {
+            throw new GradleException('Supply both embeddedWindowsHelper and embeddedMacHelper for a P4E test release.')
         }
     }
 }
