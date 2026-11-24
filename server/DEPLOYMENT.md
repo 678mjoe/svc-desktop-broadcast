@@ -1,6 +1,6 @@
 # 内置 TLS 与广播者接入
 
-新装 **0.3.3-p4d** 时填写 `public_address` 并运行 `/svcbroadcast setup`。升级时可以沿用已有的 TLS 配置、身份和设备授权。[快速配置](../README.md#服主快速配置) · [Agent 部署指引](SETUP-AGENT.md)
+新装 **0.3.3-p4d** 时填写 `public_address` 并运行 `/svcbroadcast setup`。升级时可以沿用已有的 TLS 配置、身份和设备授权。[快速配置](../README.zh-CN.md#服主快速配置) · [Agent 部署指引](SETUP-AGENT.md)
 
 ## 构建与配置
 
